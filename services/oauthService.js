@@ -1,5 +1,6 @@
 const { OAuth2Client } = require('google-auth-library');
 const axios = require('axios');
+const appleSignin = require('apple-signin-auth');
 
 /**
  * Google OAuth Service
@@ -37,15 +38,25 @@ const googleAuth = {
 const appleAuth = {
   async verifyToken(identityToken) {
     try {
-      // Apple token doğrulama için JWT decode ve verify işlemi
-      // Not: Apple Sign In için özel kütüphane kullanılmalı
-      // Şimdilik basit bir implementasyon
-      const jwt = require('jsonwebtoken');
-      const decoded = jwt.decode(identityToken);
-      
+      if (!identityToken) {
+        return null;
+      }
+
+      const clientId = process.env.APPLE_CLIENT_ID;
+      if (!clientId) {
+        console.error('APPLE_CLIENT_ID env tanımlı değil.');
+        return null;
+      }
+
+      // Apple identityToken'ı Apple'ın public key'leri ile doğrula
+      const payload = await appleSignin.verifyIdToken(identityToken, {
+        audience: clientId,
+        ignoreExpiration: false,
+      });
+
       return {
-        email: decoded.email,
-        sub: decoded.sub,
+        email: payload.email,
+        sub: payload.sub,
       };
     } catch (error) {
       console.error('Apple token verification error:', error);

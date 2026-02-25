@@ -1,11 +1,17 @@
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const cors = require('cors');
 const helmet = require('helmet');
 const dotenv = require('dotenv');
 
-// Load environment variables
+// Load environment variables (.env then .env.local for local overrides)
 dotenv.config();
+const envLocal = path.join(__dirname, '.env.local');
+if (fs.existsSync(envLocal)) {
+  dotenv.config({ path: envLocal, override: true });
+  console.log('Loaded .env.local (local development)');
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -33,9 +39,26 @@ app.use('/api/v1/premium', require('./routes/premium'));
 app.use('/api/v1/health', require('./routes/health'));
 app.use('/api/v1/body-scan', require('./routes/bodyScan'));
 
-// Health check
+// Root – tarayıcıda http://IP:3000 açılınca 404 yerine bilgi
+app.get('/', (req, res) => {
+  res.json({
+    message: 'FitGym Backend',
+    health: '/health',
+    api: '/api/v1',
+  });
+});
+
+// Health check (http://IP:3000/health)
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// API v1 root (http://IP:3000/api/v1 – 404 yerine bilgi)
+app.get('/api/v1', (req, res) => {
+  res.json({
+    message: 'FitGym API v1',
+    endpoints: ['/api/v1/auth', '/api/v1/user', '/api/v1/onboarding', '/api/v1/workouts', '/api/v1/health'],
+  });
 });
 
 // 404 handler
@@ -56,7 +79,7 @@ app.use((err, req, res, next) => {
 const HOST = process.env.HOST || '0.0.0.0';
 app.listen(PORT, HOST, () => {
   console.log(`Server is running on http://${HOST}:${PORT}`);
-  console.log(`Yerel ağdan erişim: http://192.168.1.115:${PORT} (Mac IP'n ile değiştir)`);
+  console.log(`Yerel ağdan erişim: http://192.168.1.113:${PORT} (Mac IP'n ile değiştir)`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 

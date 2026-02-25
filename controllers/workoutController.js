@@ -58,27 +58,44 @@ exports.deleteWorkoutPlan = async (req, res) => {
   }
 };
 
-// GET /workouts/exercises?category=&muscleGroup=&sort=popular
+// GET /workouts/exercises?category=&muscleGroup=&sort=popular&search=
 exports.getExercises = async (req, res) => {
   try {
-    const { category, muscleGroup, sort } = req.query;
-    let sql = `
-      SELECT e.id, e.name, e.description, e.category, e.muscle_group, e.video_url, e.image_url,
-             e.instructions, e.difficulty, e.equipment_needed,
-             (SELECT COUNT(*) FROM workout_session_exercises wse WHERE wse.exercise_id = e.id) AS usage_count
-      FROM exercises e WHERE 1=1`;
+    const category = req.query.category ? String(req.query.category).trim() : '';
+    const muscleGroup = req.query.muscleGroup ? String(req.query.muscleGroup).trim() : '';
+    const { sort, search } = req.query;
+
+    const baseSelect = `SELECT e.id, e.name, e.description, e.category, e.muscle_group, e.video_url, e.image_url,
+       e.instructions, e.difficulty, e.equipment_needed, COALESCE(e.is_premium, 0) AS is_premium,
+       (SELECT COUNT(*) FROM workout_session_exercises wse WHERE wse.exercise_id = e.id) AS usage_count
+       FROM exercises e WHERE 1=1`;
+    let sql = baseSelect;
     const params = [];
+
     if (category) {
-      sql += ' AND e.category = ?';
-      params.push(category);
+      sql += ' AND (e.category = ? OR LOWER(e.category) = LOWER(?))';
+      params.push(category, category);
     }
     if (muscleGroup) {
-      sql += ' AND e.muscle_group = ?';
-      params.push(muscleGroup);
+      sql += ' AND (e.muscle_group = ? OR LOWER(e.muscle_group) = LOWER(?) OR e.muscle_group IS NULL OR e.muscle_group = "")';
+      params.push(muscleGroup, muscleGroup);
+    }
+    if (search && String(search).trim()) {
+      const term = `%${String(search).trim()}%`;
+      sql += ' AND (e.name LIKE ? OR e.description LIKE ? OR e.category LIKE ? OR e.muscle_group LIKE ?)';
+      params.push(term, term, term, term);
     }
     sql += sort === 'popular' ? ' ORDER BY usage_count DESC, e.id ASC' : ' ORDER BY e.category, e.name';
     sql += ' LIMIT 100';
-    const [rows] = await pool.execute(sql, params);
+
+    let [rows] = await pool.execute(sql, params);
+    if (rows.length === 0 && category && muscleGroup) {
+      [rows] = await pool.execute(
+        baseSelect + ' AND (e.category = ? OR LOWER(e.category) = LOWER(?))' +
+        (sort === 'popular' ? ' ORDER BY usage_count DESC, e.id ASC' : ' ORDER BY e.category, e.name') + ' LIMIT 100',
+        [category, category]
+      );
+    }
     res.json({
       exercises: rows.map((r) => ({
         id: r.id,
@@ -91,6 +108,7 @@ exports.getExercises = async (req, res) => {
         instructions: r.instructions,
         difficulty: r.difficulty,
         equipmentNeeded: r.equipment_needed ? (typeof r.equipment_needed === 'string' ? JSON.parse(r.equipment_needed) : r.equipment_needed) : null,
+        isPremium: !!(r.is_premium),
         usageCount: Number(r.usage_count) || 0,
       })),
     });
@@ -121,8 +139,7 @@ exports.getExerciseDetail = async (req, res) => {
   try {
     const { id } = req.params;
     const [rows] = await pool.execute(
-      `SELECT id, name, description, category, muscle_group, video_url, image_url, instructions, difficulty, equipment_needed 
-       FROM exercises WHERE id = ?`,
+      `SELECT id, name, description, category, muscle_group, video_url, image_url, instructions, difficulty, equipment_needed, COALESCE(is_premium, 0) AS is_premium FROM exercises WHERE id = ?`,
       [id]
     );
     if (rows.length === 0) {
@@ -140,6 +157,7 @@ exports.getExerciseDetail = async (req, res) => {
       instructions: r.instructions,
       difficulty: r.difficulty,
       equipmentNeeded: r.equipment_needed ? (typeof r.equipment_needed === 'string' ? JSON.parse(r.equipment_needed) : r.equipment_needed) : null,
+      isPremium: !!(r.is_premium),
     });
   } catch (error) {
     console.error('getExerciseDetail error:', error);

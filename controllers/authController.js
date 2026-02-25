@@ -207,6 +207,11 @@ const signInWithApple = async (req, res) => {
     }
 
     const userEmail = email || appleUser.email;
+    // İsim: Öncelik sırası -> client'tan gelen fullName -> email'in @ öncesi
+    let userName = fullName;
+    if (!userName && userEmail) {
+      userName = userEmail.split('@')[0];
+    }
 
     // Kullanıcıyı bul veya oluştur
     let [users] = await pool.execute(
@@ -219,11 +224,19 @@ const signInWithApple = async (req, res) => {
       // Yeni kullanıcı oluştur
       const [result] = await pool.execute(
         'INSERT INTO users (email, name, auth_provider, is_active, created_at) VALUES (?, ?, ?, 1, NOW())',
-        [userEmail, fullName || null, 'apple']
+        [userEmail, userName || null, 'apple']
       );
       userId = result.insertId;
     } else {
       userId = users[0].id;
+      // Eğer veritabanında isim boş ama elimizde bir isim varsa, bir kereye mahsus güncelle
+      if (!users[0].name && userName) {
+        await pool.execute(
+          'UPDATE users SET name = ? WHERE id = ?',
+          [userName, userId]
+        );
+        users[0].name = userName;
+      }
     }
 
     // Token'ları oluştur
@@ -243,7 +256,7 @@ const signInWithApple = async (req, res) => {
       user: {
         id: userId,
         email: userEmail,
-        name: fullName || null,
+        name: users[0]?.name || userName || null,
       },
     });
   } catch (error) {

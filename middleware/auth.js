@@ -49,6 +49,32 @@ const authenticateToken = async (req, res, next) => {
 };
 
 /**
+ * Opsiyonel token: varsa doğrula ve req.user set et, yoksa/geçersizse devam et (req.user yok).
+ * Egzersiz/kategori listesi gibi herkese açık okuma için kullanılır.
+ */
+const optionalAuthenticateToken = async (req, res, next) => {
+  try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) return next();
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const [users] = await pool.execute(
+      'SELECT id, email, is_active FROM users WHERE id = ?',
+      [decoded.userId]
+    );
+
+    if (users.length > 0 && users[0].is_active) {
+      req.user = { id: users[0].id, email: users[0].email };
+    }
+  } catch (_) {
+    // Token yok/geçersiz – devam et, req.user set edilmez
+  }
+  next();
+};
+
+/**
  * Premium kullanıcı kontrolü middleware
  */
 const requirePremium = async (req, res, next) => {
@@ -81,5 +107,6 @@ const requirePremium = async (req, res, next) => {
 
 module.exports = {
   authenticateToken,
+  optionalAuthenticateToken,
   requirePremium,
 };

@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { authenticateToken, requirePremium } = require('../middleware/auth');
+const { authenticateToken, optionalAuthenticateToken, requirePremium } = require('../middleware/auth');
 const workoutController = require('../controllers/workoutController');
 
 /**
@@ -29,15 +29,15 @@ router.delete('/plans/:id', authenticateToken, workoutController.deleteWorkoutPl
 
 /**
  * GET /api/v1/workouts/categories
- * Kategorilere göre egzersiz sayıları (Popular Workouts için)
+ * Kategorilere göre egzersiz sayıları (herkese açık – auth yok, takılma olmaz)
  */
-router.get('/categories', authenticateToken, workoutController.getCategories);
+router.get('/categories', workoutController.getCategories);
 
 /**
  * GET /api/v1/workouts/exercises
- * Egzersiz listesini getir
+ * Egzersiz listesini getir (herkese açık – auth yok, takılma olmaz)
  */
-router.get('/exercises', authenticateToken, workoutController.getExercises);
+router.get('/exercises', workoutController.getExercises);
 
 /**
  * GET /api/v1/workouts/exercises/:id
