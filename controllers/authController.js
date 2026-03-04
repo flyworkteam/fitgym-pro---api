@@ -144,9 +144,12 @@ const signInWithGoogle = async (req, res) => {
     }
 
     // Kullanıcıyı bul veya oluştur
+    // Not: email alanı unique olduğu için auth_provider ne olursa olsun aynı e‑posta ile
+    // ikinci kez insert yaparsak ER_DUP_ENTRY hatası alırız. O yüzden önce sadece email'e
+    // göre arıyoruz; varsa mevcut kullanıcıyı kullanıyoruz.
     let [users] = await pool.execute(
-      'SELECT id, email, name, is_premium FROM users WHERE email = ? AND auth_provider = ?',
-      [googleUser.email, 'google']
+      'SELECT id, email, name, is_premium, auth_provider FROM users WHERE email = ?',
+      [googleUser.email]
     );
 
     let userId;
@@ -159,6 +162,13 @@ const signInWithGoogle = async (req, res) => {
       userId = result.insertId;
     } else {
       userId = users[0].id;
+      // Eğer daha önce farklı provider ile açılmışsa, auth_provider'ı güncelleyebiliriz (opsiyonel)
+      if (users[0].auth_provider !== 'google') {
+        await pool.execute(
+          'UPDATE users SET auth_provider = ? WHERE id = ?',
+          ['google', userId]
+        );
+      }
     }
 
     // Token'ları oluştur
