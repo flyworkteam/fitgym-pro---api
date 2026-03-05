@@ -12,23 +12,32 @@ const googleAuth = {
   ),
 
   async verifyToken(idToken) {
-    try {
-      const ticket = await this.client.verifyIdToken({
-        idToken,
-        audience: process.env.GOOGLE_CLIENT_ID,
-      });
+    const audiences = [
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_ANDROID_CLIENT_ID,
+      process.env.GOOGLE_IOS_CLIENT_ID,
+    ].filter(Boolean);
 
-      const payload = ticket.getPayload();
-      return {
-        email: payload.email,
-        name: payload.name,
-        picture: payload.picture,
-        sub: payload.sub,
-      };
-    } catch (error) {
-      console.error('Google token verification error:', error);
-      return null;
+    for (const audience of audiences) {
+      try {
+        const ticket = await this.client.verifyIdToken({
+          idToken,
+          audience,
+        });
+        const payload = ticket.getPayload();
+        return {
+          email: payload.email,
+          name: payload.name,
+          picture: payload.picture,
+          sub: payload.sub,
+        };
+      } catch (err) {
+        // Bu audience uygun değilse sıradakini dene
+        continue;
+      }
     }
+    console.error('Google token verification error: no matching audience. Check GOOGLE_CLIENT_ID, GOOGLE_ANDROID_CLIENT_ID, GOOGLE_IOS_CLIENT_ID in .env');
+    return null;
   },
 };
 
